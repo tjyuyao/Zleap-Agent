@@ -6,7 +6,7 @@ import { lstat, readdir, rm } from 'node:fs/promises';
 import { storeConfigFromEnv } from './avatarStore';
 import { clear302IntegrationConfig } from './integration302Config';
 import { clearApprovalQueue } from './liveApprovals';
-import { resetFileDefault302ModelConfigs, upsertDefault302ModelConfigs } from './modelPresets';
+import { replaceFileModelConfigs } from './modelConfigFileStore';
 import { clearPermissionPreferences } from './permissionPreferenceStore';
 import { projectStore } from './projectStore';
 import { clearToolState } from './toolStateStore';
@@ -38,7 +38,9 @@ export async function factoryResetWebData(): Promise<FactoryResetResult> {
     clearPermissionPreferences(),
     clearApprovalQueue(),
     clearToolState(),
-    resetFileDefault302ModelConfigs(),
+    // Models are purely user-managed: a factory reset clears the file list so a
+    // fresh install starts with no models (the user adds what they need).
+    replaceFileModelConfigs([]),
   ]);
 
   return {
@@ -68,7 +70,6 @@ async function resetDatabase(): Promise<FactoryResetResult['database']> {
   }
   try {
     await seedSuperAgentDefaults(store);
-    await upsertDefault302ModelConfigs(store);
   } finally {
     await store.close().catch(() => {});
   }

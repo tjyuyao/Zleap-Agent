@@ -1,6 +1,5 @@
 import { isActorResponse, requireHttpActor } from '../../../../lib/server/actor';
 import { avatarErrorResponse } from '../../../../lib/server/avatarContext';
-import { storeFromEnv } from '../../../../lib/server/avatarStore';
 import {
   DEFAULT_302_API_BASE_URL,
   DEFAULT_302_MODEL_BASE_URL,
@@ -10,7 +9,6 @@ import {
   resolve302ModelBaseUrl,
   save302IntegrationConfig,
 } from '../../../../lib/server/integration302Config';
-import { upsertDefault302ModelConfigs } from '../../../../lib/server/modelPresets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,7 +27,6 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const actor = requireHttpActor(req, { roles: ['admin'] });
   if (isActorResponse(actor)) return actor;
-  const store = await storeFromEnv();
   try {
     const body = (await req.json().catch(() => ({}))) as {
       apiKey?: string;
@@ -47,7 +44,6 @@ export async function POST(req: Request): Promise<Response> {
       apiBaseUrl: body.apiBaseUrl?.trim() || current.apiBaseUrl || DEFAULT_302_API_BASE_URL,
       modelBaseUrl: body.modelBaseUrl?.trim() || current.modelBaseUrl || DEFAULT_302_MODEL_BASE_URL,
     });
-    await upsertDefault302ModelConfigs(store, { apiKey: saved.apiKey, modelBaseUrl: saved.modelBaseUrl });
     return Response.json({
       ok: true,
       configured: Boolean(resolve302ApiKey(saved)),
@@ -56,7 +52,5 @@ export async function POST(req: Request): Promise<Response> {
     });
   } catch (error) {
     return avatarErrorResponse(error);
-  } finally {
-    await store?.close().catch(() => {});
   }
 }

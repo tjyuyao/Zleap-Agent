@@ -25,18 +25,15 @@ const getSharedStoreMock = vi.mocked(getSharedStore);
 const storeFromEnvMock = vi.mocked(storeFromEnv);
 
 /**
- * Regression for “clicking delete on the model page does nothing”: the delete
- * request itself succeeded, but the UI’s `resources.reload()` (exactly this GET) ran
- * `upsertDefault302ModelConfigs`, which re-created any missing built-in 302 preset.
- * Deleting a preset now writes a tombstone; the list must not resurrect it.
+ * Models are purely user-managed (no built-in 302 presets, no tombstones): a
+ * deleted model must stay deleted across list reloads, and deleting one must
+ * not write any side-channel state (e.g. the 302 integration config).
  */
-describe('/api/models delete + list (built-in preset tombstone)', () => {
+describe('/api/models delete + list (pure user management)', () => {
   let tempDir: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    // No shared DB and no request store: both the 302 config and the model configs
-    // are file-backed at the env-pointed temp paths below.
     getSharedStoreMock.mockResolvedValue(null);
     storeFromEnvMock.mockResolvedValue(null);
     tempDir = await mkTempDir();
@@ -50,56 +47,43 @@ describe('/api/models delete + list (built-in preset tombstone)', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('deletes a built-in 302 model and the list reload does not resurrect it', async () => {
-    const initial = await GET_MODELS(adminRequest('/api/models', 'GET'));
-    await expectStatus(initial, 200);
-    const firstModels = (await initial.json()) as { models: Array<{ id: string }> };
-    // First list seeds the two built-in presets.
-    expect(firstModels.models.map((model) => model.id)).toEqual(
-      expect.arrayContaining(['302-qwen3-6-flash', '302-qwen3-embedding-0-6b']),
-    );
-
-    const deleted = await DELETE_MODELS(
-      adminRequest('/api/models', 'DELETE', { id: '302-qwen3-6-flash' }),
-    );
-    await expectStatus(deleted, 200);
-    await expect(deleted.json()).resolves.toMatchObject({ ok: true });
-
-    // The tombstone is recorded in the 302 integration config.
-    const configRaw = await readFile(join(tempDir, '302.json'), 'utf8');
-    const config = JSON.parse(configRaw) as { removedModelIds?: string[] };
-    expect(config.removedModelIds).toEqual(expect.arrayContaining(['302-qwen3-6-flash']));
-
-    // The UI’s `resources.reload()` after a successful delete performs exactly
-    // this request; the deleted built-in model must not come back with the list.
-    const relisted = await GET_MODELS(adminRequest('/api/models', 'GET'));
-    await expectStatus(relisted, 200);
-    const finalModels = (await relisted.json()) as { models: Array<{ id: string }> };
-    expect(finalModels.models.map((model) => model.id)).not.toContain('302-qwen3-6-flash');
-    expect(finalModels.models.map((model) => model.id)).toContain('302-qwen3-embedding-0-6b');
-  });
-
-  it('deleting a custom model does not write a preset tombstone', async () => {
+  it('a deleted model stays gone after the list reload (no resurrection)', async () => {
     const created = await POST_MODELS(
       adminRequest('/api/models', 'POST', { id: 'custom-llm', model: 'gpt-custom' }),
     );
     await expectStatus(created, 201);
 
+    const listed = await GET_MODELS(adminRequest('/api/models', 'GET'));
+    await expectStatus(listed, 200);
+    const before = ((await listed.json()) as { models: Array<{ id: string }> }).models;
+    expect(before.map((model) => model.id)).toContain('custom-llm');
+
     const deleted = await DELETE_MODELS(
       adminRequest('/api/models', 'DELETE', { id: 'custom-llm' }),
     );
     await expectStatus(deleted, 200);
-    await expect(deleted.json()).resolves.toMatchObject({ ok: true });
 
-    // `custom-llm` is not a built-in preset: no tombstone is recorded in the 302 config.
+    // The UI’s `resources.reload()` after a successful delete performs exactly
+    // this GET; the deleted model must not come back.
+    const relisted = await GET_MODELS(adminRequest('/api/models', 'GET'));
+    await expectStatus(relisted, 200);
+    const after = ((await relisted.json()) as { models: Array<{ id: string }> }).models;
+    expect(after.map((model) => model.id)).not.toContain('custom-llm');
+  });
+
+  it('deleting a model that does not exist returns 404', async () => {
+    const deleted = await DELETE_MODELS(
+      adminRequest('/api/models', 'DELETE', { id: 'missing-model' }),
+    );
+    await expectStatus(deleted, 404);
+  });
+
+  it('deleting a model does not write the 302 integration config file', async () => {
+    await POST_MODELS(adminRequest('/api/models', 'POST', { id: 'custom-llm', model: 'gpt-custom' }));
+    await DELETE_MODELS(adminRequest('/api/models', 'DELETE', { id: 'custom-llm' }));
+
     const configRaw = await readFile(join(tempDir, '302.json'), 'utf8').catch(() => '');
-    const config = configRaw ? (JSON.parse(configRaw) as { removedModelIds?: string[] }) : {};
-    expect(config.removedModelIds ?? []).toEqual([]);
-
-    // And the custom model is actually gone (the delete itself works).
-    const modelsRaw = await readFile(join(tempDir, 'web-models.json'), 'utf8');
-    const models = JSON.parse(modelsRaw) as Array<{ id: string }>;
-    expect(models.map((model) => model.id)).not.toContain('custom-llm');
+    expect(configRaw).toBe('');
   });
 });
 

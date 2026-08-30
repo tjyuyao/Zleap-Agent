@@ -14,8 +14,6 @@ export type Integration302Config = {
   apiBaseUrl?: string;
   modelBaseUrl?: string;
   updatedAt?: string;
-  /** Built-in default model configs the user explicitly deleted (tombstones). */
-  removedModelIds?: string[];
 };
 
 type ModelConfigFallbackStore = {
@@ -49,12 +47,6 @@ export async function read302IntegrationConfig(): Promise<Integration302Config> 
   return read302FileConfig();
 }
 
-/** Ids of built-in default model configs the user explicitly deleted (tombstones). */
-export async function readRemoved302ModelIds(): Promise<string[]> {
-  const config = await read302IntegrationConfig();
-  return config.removedModelIds ?? [];
-}
-
 export async function save302IntegrationConfig(config: Integration302Config): Promise<Integration302Config> {
   const current = await read302IntegrationConfig();
   const next: Integration302Config = {
@@ -72,7 +64,6 @@ export async function save302IntegrationConfig(config: Integration302Config): Pr
         apiKey: next.apiKey,
         apiBaseUrl: next.apiBaseUrl,
         modelBaseUrl: next.modelBaseUrl,
-        removedModelIds: next.removedModelIds,
       },
       updatedAt: new Date(),
     });
@@ -138,16 +129,7 @@ function parse302ConfigObject(parsed: Record<string, unknown>): Integration302Co
     apiBaseUrl: stringValue(parsed.apiBaseUrl),
     modelBaseUrl: stringValue(parsed.modelBaseUrl),
     updatedAt: stringValue(parsed.updatedAt),
-    removedModelIds: parseStringArray(parsed.removedModelIds),
   };
-}
-
-function parseStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const items = value
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-    .filter((entry) => entry.length > 0);
-  return items.length > 0 ? items : undefined;
 }
 
 async function read302ModelConfigFallback(store: ModelConfigFallbackStore): Promise<Integration302Config> {

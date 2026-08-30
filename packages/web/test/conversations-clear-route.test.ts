@@ -48,7 +48,8 @@ describe('/api/conversations/clear route', () => {
     await expect(access(join(root, 'settings', 'keep.json'))).resolves.toBeUndefined();
     await expect(access(join(root, 'state', 'projects.json'))).rejects.toThrow();
     const modelConfig = await readFile(join(root, 'state', 'web-models.json'), 'utf8');
-    expect(modelConfig).toContain('qwen3.6-flash');
+    // Models are purely user-managed: a factory reset clears the model list.
+    expect(modelConfig.trim()).toBe('[]');
     expect(modelConfig).not.toContain('apiKey');
   });
 });

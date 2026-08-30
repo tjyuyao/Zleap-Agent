@@ -16,6 +16,9 @@ import { ManageDialog, ManageDialogFooterActions, ManageField, ManageForm, Manag
 /** A named reasoning-effort preset (variant) the user can switch between. */
 type VariantRow = { key: string; label: string; effort: string };
 
+/** Non-empty stand-in for "no override" — Radix reserves "" for the unselected/placeholder state. */
+const DEFAULT_EFFORT_KEY = 'default';
+
 type ModelDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -112,6 +115,14 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
     // vLLM, …) have none. On edit a blank key keeps the stored one.
     if (!id || !model.trim() || !baseUrl.trim()) {
       toast.error(t('model.validation', { defaultValue: 'Model and Base URL are required. (API key only for cloud APIs.)' }));
+      return;
+    }
+    // A preset row that carries a label or effort but no ID (key) would be
+    // silently dropped by `buildVariantsConfig` — surface it instead of saving
+    // a preset the user thinks they configured.
+    const incompleteVariant = variantRows.find((row) => !row.key.trim() && (row.label.trim() || row.effort));
+    if (incompleteVariant) {
+      toast.error(t('model.variantKeyRequired', { defaultValue: 'Each reasoning-effort preset needs an ID (key) — please fill it in or remove the preset.' }));
       return;
     }
     const provider = MODEL_PROVIDERS.find((candidate) => candidate.id === providerId) ?? DEFAULT_PROVIDER;
@@ -286,7 +297,7 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
                 <ul className="flex flex-col gap-3">
                   {variantRows.map((row, index) => (
                     <li
-                      key={`${row.key}-${index}`}
+                      key={index}
                       className="flex flex-col gap-3 rounded-md border border-border p-3"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -325,13 +336,13 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
                       </div>
                       <label className="flex flex-col gap-1 text-2xs text-muted-foreground">
                         {t('model.reasoningEffort', { defaultValue: 'Thinking effort' })}
-                        <Select value={row.effort} onValueChange={(value) => updateVariantRow(index, { effort: value })}>
+                        <Select value={row.effort} onValueChange={(value) => updateVariantRow(index, { effort: value === DEFAULT_EFFORT_KEY ? '' : value })}>
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder={t('model.effortDefault', { defaultValue: 'Default (no override)' })} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="">
+                              <SelectItem value={DEFAULT_EFFORT_KEY}>
                                 {t('model.effortDefault', { defaultValue: 'Default (no override)' })}
                               </SelectItem>
                               <SelectItem value="minimal">

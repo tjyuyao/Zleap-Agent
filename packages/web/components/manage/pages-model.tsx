@@ -384,7 +384,7 @@ function ModelApi302KeyCard({ onSaved }: { onSaved: () => void }) {
           <p className="text-xs leading-5 text-muted-foreground">
             {t('model.api302Hint', {
               defaultValue:
-                '默认使用 302 官方地址；只填 Key 就能启用 qwen3.6-flash、Qwen/Qwen3-Embedding-0.6B 和 web-search。Key 只保存在本地后端，不会回显。',
+                '默认使用 302 官方地址；填入 Key 后，请在下方的模型配置里手动添加 qwen3.6-flash / Qwen3-Embedding。Key 只保存在本地后端，不会回显。',
             })}
           </p>
           <div className="grid gap-2">

@@ -3,7 +3,6 @@ import { isActorResponse, requireHttpActor } from '../../../../lib/server/actor'
 import { getFileModelConfig } from '../../../../lib/server/modelConfigFileStore';
 import { modelKind } from '../../../../lib/models';
 import { DEFAULT_302_MODEL_BASE_URL, read302IntegrationConfig, resolve302ApiKey } from '../../../../lib/server/integration302Config';
-import { upsertDefault302ModelConfigs } from '../../../../lib/server/modelPresets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +16,6 @@ export async function POST(req: Request): Promise<Response> {
     if (!body.id?.trim()) {
       return Response.json({ error: 'id_required' }, { status: 400 });
     }
-    await upsertDefault302ModelConfigs(store);
     const model = store ? await store.models.getModelConfig(body.id.trim()) : await getFileModelConfig(body.id.trim());
     if (!model) {
       return Response.json({ error: 'model_not_found' }, { status: 404 });

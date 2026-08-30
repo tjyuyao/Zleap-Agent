@@ -13,7 +13,6 @@ import {
   setFileDefaultModel,
 } from '../../../lib/server/modelConfigFileStore';
 import { clearDefaultsForKind, markDefault, modelDefaultsChanged, normalizeModelDefaults } from '../../../lib/server/modelConfigResolve';
-import { markDefault302ModelRemoved, upsertDefault302ModelConfigs } from '../../../lib/server/modelPresets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,13 +22,11 @@ export async function GET(req: Request): Promise<Response> {
   if (isActorResponse(actor)) return actor;
   const store = await storeFromEnv();
   if (!store) {
-    const raw = await upsertDefault302ModelConfigs(null);
-    const models = await persistNormalizedModels(null, raw);
+    const models = await listFileModelConfigs();
     return Response.json({ models: models.map(redactModel), persistence: { enabled: false, reachable: false, fallback: 'file' } });
   }
   try {
-    const raw = await upsertDefault302ModelConfigs(store);
-    const models = await persistNormalizedModels(store, raw);
+    const models = await store.models.listModelConfigs();
     return Response.json({ models: models.map(redactModel), persistence: { enabled: true, reachable: true } });
   } finally {
     await store.close().catch(() => {});
@@ -150,7 +147,6 @@ export async function PATCH(req: Request): Promise<Response> {
       if (!body.id?.trim()) {
         return Response.json({ error: 'id_required' }, { status: 400 });
       }
-      await upsertDefault302ModelConfigs(null);
       if (body.providerId !== undefined || body.model !== undefined || body.config !== undefined || body.purpose !== undefined || body.kind !== undefined) {
         const model = await getFileModelConfig(body.id.trim());
         if (!model) {
@@ -195,7 +191,6 @@ export async function PATCH(req: Request): Promise<Response> {
     if (!body.id?.trim()) {
       return Response.json({ error: 'id_required' }, { status: 400 });
     }
-    await upsertDefault302ModelConfigs(store);
     const model = await store.models.getModelConfig(body.id.trim());
     if (!model) {
       return Response.json({ error: 'model_not_found' }, { status: 404 });
@@ -247,14 +242,10 @@ export async function DELETE(req: Request): Promise<Response> {
       if (!id) {
         return Response.json({ error: 'id_required' }, { status: 400 });
       }
-      await upsertDefault302ModelConfigs(null);
       const deleted = await deleteFileModelConfig(id);
       if (!deleted) {
         return Response.json({ error: 'model_not_found' }, { status: 404 });
       }
-      // Remember an explicitly deleted built-in preset so the next list refresh's
-      // `upsertDefault302ModelConfigs` does not resurrect it (no-op for custom models).
-      await markDefault302ModelRemoved(id);
       const remaining = await listFileModelConfigs();
       await persistNormalizedModels(null, remaining);
       return Response.json({ ok: true, model: redactModel(deleted) });
@@ -268,15 +259,11 @@ export async function DELETE(req: Request): Promise<Response> {
     if (!id) {
       return Response.json({ error: 'id_required' }, { status: 400 });
     }
-    await upsertDefault302ModelConfigs(store);
     const model = await store.models.getModelConfig(id);
     if (!model) {
       return Response.json({ error: 'model_not_found' }, { status: 404 });
     }
     await store.models.deleteModelConfig(id);
-    // Remember an explicitly deleted built-in preset so the next list refresh's
-    // `upsertDefault302ModelConfigs` does not resurrect it (no-op for custom models).
-    await markDefault302ModelRemoved(id);
     await persistNormalizedModels(store, await store.models.listModelConfigs());
     return Response.json({ ok: true, model: redactModel(model) });
   } catch (error) {

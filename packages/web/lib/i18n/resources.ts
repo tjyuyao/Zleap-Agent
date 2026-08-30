@@ -247,7 +247,7 @@ export const resources = {
         api302Configured: '已配置',
         api302NotConfigured: '未配置',
         api302Hint:
-          '填一次 302.AI API Key，会自动补齐 qwen3.6-flash、Qwen/Qwen3-Embedding-0.6B 和 web-search 工具。Key 只保存在本地后端，不会展示给模型。',
+          '默认使用 302 官方地址；填入 Key 后，请在下方的模型配置里手动添加 qwen3.6-flash / Qwen3-Embedding。Key 只保存在本地后端，不会展示给模型。',
         api302KeyRequired: '请先填写 302.AI API Key',
         api302Saved: '302.AI API Key 已保存',
         test: '测试模型',
@@ -267,6 +267,7 @@ export const resources = {
         variantsHint: '为这个模型配置若干种“思考强度”预设，供用户在聊天时随时切换；留空则保持模型默认行为。',
         addVariant: '添加预设',
         variantKey: '标识 (key)',
+        variantKeyRequired: '每个推理强度预设都需要一个标识 (key)——请填写后再保存，或移除该预设。',
         variantLabel: '显示名',
         reasoningEffort: '思考强度',
         effortDefault: '默认（不覆盖）',
@@ -1112,7 +1113,7 @@ export const resources = {
         api302Configured: 'Configured',
         api302NotConfigured: 'Not configured',
         api302Hint:
-          'Enter one 302.AI API Key to prepare qwen3.6-flash, Qwen/Qwen3-Embedding-0.6B, and the web-search toolset. The key is stored only on the local backend and is never shown to the model.',
+          'Uses the official 302 endpoint; after entering the key, add qwen3.6-flash / Qwen3-Embedding model configs below manually. The key is stored only on the local backend and is never shown to the model.',
         api302KeyRequired: 'Enter a 302.AI API Key first',
         api302Saved: '302.AI API Key saved',
         test: 'Test model',
@@ -1131,6 +1132,7 @@ export const resources = {
         variantsHint: 'Give this model several "thinking effort" presets the user can switch between while chatting; leave empty to keep the model\'s default behavior.',
         addVariant: 'Add a preset',
         variantKey: 'ID (key)',
+        variantKeyRequired: 'Each reasoning-effort preset needs an ID (key) — fill it in or remove the preset.',
         variantLabel: 'Label',
         reasoningEffort: 'Thinking effort',
         effortDefault: 'Default (no override)',
