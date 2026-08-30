@@ -1,5 +1,5 @@
 import { ModelRegistry, ProviderRegistry, type AiRegistries } from './registry.js';
-import type { Model } from './types.js';
+import type { Model, ReasoningEffort } from './types.js';
 import { OPENAI_COMPATIBLE_PROVIDER_ID, OpenAiCompatibleProvider } from './providers/openai-compatible.js';
 import { ANTHROPIC_PROVIDER_ID, AnthropicProvider } from './providers/anthropic.js';
 
@@ -24,6 +24,8 @@ export type CustomModelConfig = {
   supportsThinking?: boolean;
   supportsCache?: boolean;
   tokenizer?: string;
+  /** Per-request reasoning/thinking effort (from a selected model variant). */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export function createAiRegistries(config?: { models?: CustomModelConfig[] }): AiRegistries {
@@ -54,5 +56,6 @@ export function toModel(config: CustomModelConfig): Model {
     supportsThinking: config.supportsThinking,
     supportsCache: config.supportsCache,
     tokenizer: config.tokenizer,
+    reasoningEffort: config.reasoningEffort,
   };
 }

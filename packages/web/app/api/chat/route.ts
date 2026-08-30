@@ -6,7 +6,7 @@ import {
   type EngineOverrides,
   type HandleOptions,
 } from '@zleap/agent/conversation';
-import { DEFAULT_AVATAR_ID, toCanonicalSpaceId, type InboundMessage, type ScheduledTaskRecord } from '@zleap/core';
+import { DEFAULT_AVATAR_ID, toCanonicalSpaceId, type InboundMessage, type ModelConfigRecord, type ScheduledTaskRecord } from '@zleap/core';
 import { AvatarRunInputError, buildWebChatRunInput } from '@zleap/avatar';
 import type { ZleapStore } from '@zleap/store';
 import { storeFromEnv } from '../../../lib/server/avatarStore';
@@ -67,14 +67,43 @@ const DISPLAY_PREVIEW_MAX_BYTES = 4 * 1024 * 1024;
  * names in the root .env. When unset, the engine has no model and replies with
  * a "configure a model" error (there is no offline fallback).
  */
-async function modelFromStore(store: ZleapStore | null, modelConfigId?: string): Promise<ModelConfig | undefined> {
+async function modelFromStore(
+  store: ZleapStore | null,
+  modelConfigId?: string,
+  variantId?: string,
+): Promise<ModelConfig | undefined> {
   const models = store ? await store.models.listModelConfigs() : await listFileModelConfigs();
   const llmOnly = models.filter((model) => modelKind(model) === 'llm');
   const selected = modelConfigId
     ? llmOnly.find((model) => model.id === modelConfigId)
     : llmOnly.find((model) => model.config?.isDefault === true) ?? llmOnly[0];
   if (!selected) return undefined;
-  return toEngineModel(selected);
+  const model = toEngineModel(selected);
+  if (model) {
+    applyVariantReasoningEffort(model, selected, variantId);
+  }
+  return model;
+}
+
+/** Overlay the selected variant's reasoning effort onto the resolved engine model.
+ *  When no variant is chosen, whatever the record pins (via toEngineModel) is kept. */
+function applyVariantReasoningEffort(model: ModelConfig, record: ModelConfigRecord, variantId?: string): void {
+  if (!variantId) {
+    return;
+  }
+  const config = (record.config ?? {}) as Record<string, unknown>;
+  const variants = config.variants;
+  if (!variants || typeof variants !== 'object' || Array.isArray(variants)) {
+    return;
+  }
+  const entry = (variants as Record<string, unknown>)[variantId];
+  if (!entry || typeof entry !== 'object') {
+    return;
+  }
+  const effort = (entry as Record<string, unknown>).reasoningEffort;
+  if (typeof effort === 'string') {
+    model.reasoningEffort = effort as ModelConfig['reasoningEffort'];
+  }
 }
 
 async function modelConfigIdFromTargetSpace(store: ZleapStore | null, targetSpace?: string): Promise<string | undefined> {
@@ -481,6 +510,7 @@ export async function POST(req: Request): Promise<Response> {
   let avatarId = DEFAULT_AVATAR_ID;
   let projectId: string | null | undefined;
   let modelConfigId: string | undefined;
+  let variantId: string | undefined;
   let permissionMode = normalizePermissionMode(undefined);
   let targetSpace: string | undefined;
   let runMode: RunMode = 'normal';
@@ -498,6 +528,7 @@ export async function POST(req: Request): Promise<Response> {
       avatarId?: string;
       projectId?: string | null;
       modelId?: string;
+      variantId?: string;
       permissionMode?: unknown;
       targetSpace?: string;
       runMode?: unknown;
@@ -516,6 +547,7 @@ export async function POST(req: Request): Promise<Response> {
         ? null
         : undefined;
     modelConfigId = typeof body.modelId === 'string' && body.modelId.trim() ? body.modelId.trim() : undefined;
+    variantId = boundedString(body.variantId, APPROVAL_ID_MAX_CHARS);
     permissionMode = normalizePermissionMode(body.permissionMode);
     targetSpace = typeof body.targetSpace === 'string' && body.targetSpace.trim() ? body.targetSpace.trim() : undefined;
     runMode = normalizeRunMode(body.runMode);
@@ -594,7 +626,7 @@ export async function POST(req: Request): Promise<Response> {
   let selectedSkill: SelectedSkillContext | undefined;
   try {
     const spaceModelConfigId = runMode === 'plan' ? undefined : await modelConfigIdFromTargetSpace(modelStore, targetSpace);
-    model = (spaceModelConfigId ? await modelFromStore(modelStore, spaceModelConfigId) : undefined) ?? (await modelFromStore(modelStore, modelConfigId)) ?? model;
+    model = (spaceModelConfigId ? await modelFromStore(modelStore, spaceModelConfigId, variantId) : undefined) ?? (await modelFromStore(modelStore, modelConfigId, variantId)) ?? model;
     if (skillId && modelStore && 'skills' in modelStore) {
       const record = await modelStore.skills.getSkill(skillId).catch(() => undefined);
       selectedSkill = record

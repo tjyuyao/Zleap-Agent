@@ -7,9 +7,14 @@ import { slugify } from '@/lib/utils';
 import { postJson, patchJson } from '@/lib/api';
 import type { ModelConfigView } from '@/lib/useResources';
 import { modelKind, type ModelKind } from '@/lib/models';
+import { Plus, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ManageDialog, ManageDialogFooterActions, ManageField, ManageForm, ManagePreviewBlock } from './manage-ui';
+
+/** A named reasoning-effort preset (variant) the user can switch between. */
+type VariantRow = { key: string; label: string; effort: string };
 
 type ModelDialogProps = {
   open: boolean;
@@ -47,6 +52,8 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
   const [maxOutput, setMaxOutput] = useState('');
   const [embeddingMode, setEmbeddingMode] = useState<'text' | 'multimodal'>('text');
   const [embeddingDimension, setEmbeddingDimension] = useState('');
+  /** Reasoning-effort presets (variants) this model declares — editable for LLMs. */
+  const [variantRows, setVariantRows] = useState<VariantRow[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -66,6 +73,7 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
       setMaxOutput(c.maxOutputTokens != null ? String(c.maxOutputTokens) : '');
       setEmbeddingMode(c.embeddingMode === 'multimodal' ? 'multimodal' : 'text');
       setEmbeddingDimension(c.embeddingDimension != null ? String(c.embeddingDimension) : '');
+      setVariantRows(readVariantRows(c.variants));
       return;
     }
     setKind('llm');
@@ -79,6 +87,7 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
     setMaxOutput('');
     setEmbeddingMode('text');
     setEmbeddingDimension('');
+    setVariantRows([]);
   }, [open, editTarget]);
 
   const changeProvider = (value: string) => {
@@ -91,6 +100,11 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
       setBaseUrl('');
     }
   };
+
+  const addVariantRow = () => setVariantRows((rows) => [...rows, { key: '', label: '', effort: '' }]);
+  const removeVariantRow = (index: number) => setVariantRows((rows) => rows.filter((_, i) => i !== index));
+  const updateVariantRow = (index: number, patch: Partial<VariantRow>) =>
+    setVariantRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
   const submit = async () => {
     const id = editing ? editTarget!.id : slugify(name || model);
@@ -116,6 +130,10 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
       // (PATCH merges the submitted config over the stored one).
       config.embeddingMode = embeddingMode;
       config.embeddingDimension = numeric(embeddingDimension) ?? null;
+    }
+    if (config && kind === 'llm') {
+      // Drop empty rows; always write the (possibly empty) set so an edit can clear.
+      config.variants = buildVariantsConfig(variantRows);
     }
     setBusy(true);
     try {
@@ -252,6 +270,98 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
             <ManageField label={t('model.maxOutput')} htmlFor="model-max">
               <Input id="model-max" value={maxOutput} onChange={(e) => setMaxOutput(e.target.value)} placeholder="8192" inputMode="numeric" />
             </ManageField>
+
+            <ManageField
+              label={t('model.variants', { defaultValue: 'Reasoning-effort presets' })}
+              description={t('model.variantsHint', {
+                defaultValue:
+                  'Named thinking-effort presets the user can switch between while chatting; leave empty to keep the model’s default behavior.',
+              })}
+            >
+              {variantRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t('model.variantEmpty', { defaultValue: 'No presets yet — add one.' })}
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {variantRows.map((row, index) => (
+                    <li
+                      key={`${row.key}-${index}`}
+                      className="flex flex-col gap-3 rounded-md border border-border p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-2xs uppercase tracking-wide text-muted-foreground">
+                          {row.key.trim() || `#${index + 1}`}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => removeVariantRow(index)}
+                          title={t('model.removeVariant', { defaultValue: 'Remove' })}
+                          aria-label={t('model.removeVariant', { defaultValue: 'Remove' })}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className="flex flex-col gap-1 text-2xs text-muted-foreground">
+                          {t('model.variantKey', { defaultValue: 'ID (key)' })}
+                          <Input
+                            value={row.key}
+                            onChange={(e) => updateVariantRow(index, { key: e.target.value })}
+                            placeholder="low"
+                            className="font-mono text-xs"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-2xs text-muted-foreground">
+                          {t('model.variantLabel', { defaultValue: 'Label' })}
+                          <Input
+                            value={row.label}
+                            onChange={(e) => updateVariantRow(index, { label: e.target.value })}
+                            placeholder={t('model.variantLabelPlaceholder', { defaultValue: 'e.g. Quick · Low thinking' })}
+                            className="text-xs"
+                          />
+                        </label>
+                      </div>
+                      <label className="flex flex-col gap-1 text-2xs text-muted-foreground">
+                        {t('model.reasoningEffort', { defaultValue: 'Thinking effort' })}
+                        <Select value={row.effort} onValueChange={(value) => updateVariantRow(index, { effort: value })}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={t('model.effortDefault', { defaultValue: 'Default (no override)' })} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="">
+                                {t('model.effortDefault', { defaultValue: 'Default (no override)' })}
+                              </SelectItem>
+                              <SelectItem value="minimal">
+                                {t('model.effortMinimal', { defaultValue: 'Minimal' })}
+                              </SelectItem>
+                              <SelectItem value="low">
+                                {t('model.effortLow', { defaultValue: 'Low' })}
+                              </SelectItem>
+                              <SelectItem value="medium">
+                                {t('model.effortMedium', { defaultValue: 'Medium' })}
+                              </SelectItem>
+                              <SelectItem value="high">
+                                {t('model.effortHigh', { defaultValue: 'High' })}
+                              </SelectItem>
+                              <SelectItem value="xhigh">
+                                {t('model.effortXHigh', { defaultValue: 'X-High' })}
+                              </SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button variant="outline" size="sm" onClick={addVariantRow} className="mt-3 self-start">
+                <Plus className="size-3.5" />
+                {t('model.addVariant', { defaultValue: 'Add a preset' })}
+              </Button>
+            </ManageField>
           </>
         ) : null}
 
@@ -269,4 +379,33 @@ function numeric(value: string): number | undefined {
 function compact(obj: Record<string, unknown>): Record<string, unknown> | undefined {
   const entries = Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== '');
   return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+/** Parse a stored `config.variants` blob into editable rows. */
+function readVariantRows(raw: unknown): VariantRow[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const rows: VariantRow[] = [];
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const entry = (value ?? {}) as { displayName?: unknown; reasoningEffort?: unknown };
+    rows.push({
+      key,
+      label: typeof entry.displayName === 'string' ? entry.displayName : '',
+      effort: typeof entry.reasoningEffort === 'string' ? entry.reasoningEffort : '',
+    });
+  }
+  return rows;
+}
+
+/** Turn the editable rows into the `config.variants` shape (dropping empty keys). */
+function buildVariantsConfig(rows: VariantRow[]): Record<string, { displayName?: string; reasoningEffort?: string }> {
+  const out: Record<string, { displayName?: string; reasoningEffort?: string }> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (!key) continue;
+    const entry: { displayName?: string; reasoningEffort?: string } = {};
+    if (row.label.trim()) entry.displayName = row.label.trim();
+    if (row.effort) entry.reasoningEffort = row.effort;
+    out[key] = entry;
+  }
+  return out;
 }

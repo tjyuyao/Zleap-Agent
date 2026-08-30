@@ -65,6 +65,11 @@ export type ProviderCacheBreakpoint = {
   messageIndex: number;
 };
 
+/** Reasoning/thinking effort levels a provider can be told to spend.
+ *  Mirrors the OpenAI-compatible `reasoning_effort` scale and opencode's
+ *  per-model variant presets (xhigh/medium/low). */
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export type Model = {
   id: string;
   provider: string;
@@ -78,6 +83,8 @@ export type Model = {
   supportsThinking?: boolean;
   supportsCache?: boolean;
   tokenizer?: string;
+  /** Per-request reasoning/thinking effort (from the selected model variant). */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type ProviderCapabilities = {
@@ -116,6 +123,8 @@ export type ProviderOptions = {
   apiKey?: string;
   baseUrl?: string;
   metadata?: Record<string, unknown>;
+  /** Per-request reasoning/thinking effort override (from a model variant). */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type AssistantStreamEvent =

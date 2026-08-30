@@ -48,6 +48,28 @@ export function defaultModelIds(models: ModelConfigView[]): Partial<Record<Model
   };
 }
 
+/** A selectable entry in a model's reasoning-effort variant picker. */
+export type ModelVariantOption = { id: string; name: string };
+
+/** The model's declared reasoning-effort variants (from `config.variants`).
+ *  Returns an empty list when the model declares none. The UI adds a
+ *  leading "default (no preset)" entry on top of these. */
+export function modelVariantOptions(model: { model?: string; config?: Record<string, unknown> } | undefined): ModelVariantOption[] {
+  if (!model) return [];
+  const variants = model.config?.variants;
+  if (!variants || typeof variants !== 'object' || Array.isArray(variants)) return [];
+  const options: ModelVariantOption[] = [];
+  for (const [id, raw] of Object.entries(variants)) {
+    const entry = (raw ?? {}) as { displayName?: unknown; reasoningEffort?: unknown };
+    const effort = typeof entry.reasoningEffort === 'string' ? entry.reasoningEffort : undefined;
+    const display = typeof entry.displayName === 'string' && entry.displayName.trim()
+      ? entry.displayName.trim()
+      : effort ?? id;
+    options.push({ id, name: display });
+  }
+  return options;
+}
+
 export function hasModelApiKey(model: { config?: Record<string, unknown> }): boolean {
   const config = model.config ?? {};
   if (config.hasApiKey === true) return true;

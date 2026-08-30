@@ -104,6 +104,45 @@ describe('OpenAiCompatibleProvider request body', () => {
     expect(JSON.stringify(body)).not.toContain('semiStable');
   });
 
+  it('serializes a model-level reasoning_effort into the body', async () => {
+    const variantModel: Model = { ...model, reasoningEffort: 'low' };
+    let captured: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        captured = JSON.parse(init.body) as Record<string, unknown>;
+        return sseResponse(['[DONE]']);
+      }),
+    );
+    for await (const event of new OpenAiCompatibleProvider().stream(variantModel, baseReq([]))) {
+      void event;
+    }
+    vi.unstubAllGlobals();
+    expect(captured.reasoning_effort).toBe('low');
+  });
+
+  it('prefers a per-run reasoning_effort option over the model level', async () => {
+    const variantModel: Model = { ...model, reasoningEffort: 'low' };
+    let captured: Record<string, unknown> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { body: string }) => {
+        captured = JSON.parse(init.body) as Record<string, unknown>;
+        return sseResponse(['[DONE]']);
+      }),
+    );
+    for await (const event of new OpenAiCompatibleProvider().stream(variantModel, baseReq([]), { reasoningEffort: 'xhigh' })) {
+      void event;
+    }
+    vi.unstubAllGlobals();
+    expect(captured.reasoning_effort).toBe('xhigh');
+  });
+
+  it('omits reasoning_effort entirely when neither model nor options set it', async () => {
+    const { body } = await collect(baseReq([]), ['[DONE]']);
+    expect('reasoning_effort' in body).toBe(false);
+  });
+
   it('preserves assistant tool_calls before tool results', async () => {
     const { body } = await collect(
       {

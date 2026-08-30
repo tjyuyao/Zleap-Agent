@@ -56,6 +56,9 @@ export class OpenAiCompatibleProvider implements ProviderAdapter {
               ? request.tools.map((tool) => ({ type: 'function', function: tool }))
               : undefined,
           temperature: options?.temperature,
+          // Omitted when unset — most OpenAI-compatible endpoints (Qwen/DeepSeek/
+          // vLLM/…) tolerate it, and it is the wire knob a model variant tunes.
+          reasoning_effort: options?.reasoningEffort ?? model.reasoningEffort,
           max_tokens: options?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_OPENAI_COMPATIBLE_MAX_OUTPUT_TOKENS,
           stream: true,
           stream_options: { include_usage: true },

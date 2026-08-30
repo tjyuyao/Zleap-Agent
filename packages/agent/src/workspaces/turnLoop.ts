@@ -5,6 +5,7 @@ import {
   type Message,
   type ProviderCacheBreakpoint,
   type ProviderRequest,
+  type ReasoningEffort,
   type ToolSchema,
   type Usage,
 } from '@zleap/ai';
@@ -2754,7 +2755,15 @@ async function runModelTurn(
   });
 
   try {
-    for await (const event of stream(registries, modelId, request, { signal })) {
+    // Per-request reasoning effort (from the selected model variant) travels
+    // with the stream options so the provider serializes it for this turn.
+    let reasoningEffort: ReasoningEffort | undefined;
+    try {
+      reasoningEffort = registries.models.get(modelId).reasoningEffort;
+    } catch {
+      // Defensive: registry miss; the provider falls back to model.reasoningEffort.
+    }
+    for await (const event of stream(registries, modelId, request, { signal, reasoningEffort })) {
       if (event.type === 'text_delta') {
         text += event.text;
         emit({ kind: 'text', text: event.text });

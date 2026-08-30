@@ -83,6 +83,8 @@ export function ModelPage({ resources, avatarId, onChanged, onBack }: PageProps)
   const previewIsDefault = previewModel ? isDefaultForKind(previewModel, resources.models) : false;
   const previewKind = previewModel ? modelKind(previewModel) : 'llm';
   const previewBaseUrl = typeof previewCfg.baseUrl === 'string' ? previewCfg.baseUrl : '';
+  /** Readable summary of the model's declared reasoning-effort variants. */
+  const previewVariantsSummary = formatModelVariantsSummary(previewCfg.variants, t);
   return (
     <PageShell
       icon={<Cpu className="size-4" />}
@@ -230,6 +232,12 @@ export function ModelPage({ resources, avatarId, onChanged, onBack }: PageProps)
               value={previewIsDefault ? t('common.yes', { defaultValue: '是' }) : t('common.no', { defaultValue: '否' })}
             />
             {previewBaseUrl ? <ManageDetailItem label={t('model.baseUrl')} value={previewBaseUrl} /> : null}
+            {previewKind === 'embedding' ? null : (
+              <ManageDetailItem
+                label={t('model.variants', { defaultValue: 'Reasoning-effort presets' })}
+                value={previewVariantsSummary}
+              />
+            )}
           </ManageDetailGrid>
         ) : null}
       </ManageDrawer>
@@ -250,6 +258,31 @@ export function ModelPage({ resources, avatarId, onChanged, onBack }: PageProps)
       />
     </PageShell>
   );
+}
+
+/** Summarize a model's `config.variants` for the preview drawer. */
+function formatModelVariantsSummary(
+  raw: unknown,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return t('model.variantsNone', { defaultValue: 'None' });
+  }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length === 0) {
+    return t('model.variantsNone', { defaultValue: 'None' });
+  }
+  return entries
+    .map(([key, value]) => {
+      const entry = (value ?? {}) as { displayName?: unknown; reasoningEffort?: unknown };
+      const label =
+        typeof entry.displayName === 'string' && entry.displayName.trim()
+          ? entry.displayName.trim()
+          : key;
+      const effort = typeof entry.reasoningEffort === 'string' ? entry.reasoningEffort : undefined;
+      return effort ? `${key} → ${label} (${effort})` : `${key} → ${label}`;
+    })
+    .join('  ·  ');
 }
 
 function modelErrorMessage(t: ReturnType<typeof useTranslation>['t'], error: unknown): string {

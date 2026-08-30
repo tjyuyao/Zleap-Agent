@@ -53,7 +53,7 @@ import type { RuntimeContextView } from '@/lib/services';
 import { IMAGE_ATTACHMENT_LIMITS } from '@/lib/chatAttachments';
 import { useComposerAttachments } from '@/hooks/useComposerAttachments';
 import { filterAgentMentions, filterComposerCommands, parseMention, parseSlashCommand } from '@/lib/composerCommands';
-import { modelDisplayLabel } from '@/lib/models';
+import { modelDisplayLabel, modelVariantOptions, type ModelVariantOption } from '@/lib/models';
 import { parseProjectTheme } from '@/lib/projects';
 import { resolveSpaceIcon, type SpaceItem } from '@/lib/spaces';
 import { isComposerCompositionKeyEvent } from '@/lib/composerKeyboard';
@@ -122,6 +122,8 @@ type ComposerProps = {
   agentId?: string;
   projectId?: string;
   modelId?: string;
+  /** Selected reasoning-effort variant for this model (see modelVariantOptions). */
+  variantId?: string;
   permissionMode?: PermissionMode;
   contextSnapshot?: ContextSnapshot | null;
   contextCompaction?: {
@@ -141,6 +143,8 @@ type ComposerProps = {
   onProjectCreated?: (id: string) => void;
   onCreateProject?: () => void;
   onModelChange?: (id: string) => void;
+  /** Called when the user picks a reasoning-effort variant for the model. */
+  onVariantChange?: (id: string) => void;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onRunModeChange?: (mode: RunMode) => void;
   onSelectedSkillChange?: (id: string | undefined) => void;
@@ -177,6 +181,7 @@ export function Composer({
   agentId,
   projectId,
   modelId,
+  variantId,
   permissionMode = DEFAULT_PERMISSION_MODE,
   contextSnapshot = null,
   contextCompaction,
@@ -190,6 +195,7 @@ export function Composer({
   onProjectCreated,
   onCreateProject,
   onModelChange,
+  onVariantChange,
   onPermissionModeChange,
   onRunModeChange,
   onSelectedSkillChange,
@@ -272,6 +278,16 @@ export function Composer({
   const selectedModel = models.find((m) => m.id === modelId) ?? models[0];
   const modelLabel = selectedModel ? modelDisplayLabel(selectedModel) : t('chat.noModel');
   const selectedModelContextWindow = numericModelConfig(selectedModel, 'contextWindow');
+  // Reasoning-effort variants the selected model declares. A leading
+  // "default" entry lets the user drop back to the model's stock behavior.
+  const variantOptions = modelVariantOptions(selectedModel);
+  const variantChipOptions: ModelVariantOption[] = [
+    { id: '', name: t('composer.variantDefault', { defaultValue: 'Default' }) },
+    ...variantOptions,
+  ];
+  const variantLabel = variantOptions.some((option) => option.id === variantId)
+    ? variantOptions.find((option) => option.id === variantId)!.name
+    : t('composer.variantDefault', { defaultValue: 'Default' });
 
   const mention = showContextPickers ? parseMention(value, cursor) : null;
 
@@ -601,6 +617,7 @@ export function Composer({
       targetSpace: targetSpaceId,
       runMode,
       ...(selectedSkill ? { skillId: selectedSkill.id, skillLabel: selectedSkill.label } : {}),
+      variantId,
       ...options,
     });
     if (options?.runMode === 'normal' && runMode !== 'normal') {
@@ -1032,6 +1049,17 @@ export function Composer({
                       options={models.map((m) => ({ id: m.id, name: modelDisplayLabel(m) }))}
                       selectedId={modelId ?? selectedModel?.id}
                       onSelect={(id) => onModelChange?.(id)}
+                      align="end"
+                    />
+                  ) : null}
+
+                  {variantOptions.length > 0 ? (
+                    <ContextChip
+                      variant="label"
+                      label={variantLabel}
+                      options={variantChipOptions}
+                      selectedId={variantId ?? ''}
+                      onSelect={(id) => onVariantChange?.(id)}
                       align="end"
                     />
                   ) : null}

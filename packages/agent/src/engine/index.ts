@@ -2762,6 +2762,7 @@ export class ChatEngine {
       supportsThinking: booleanConfig(config, 'supportsThinking'),
       supportsCache: booleanConfig(config, 'supportsCache'),
       tokenizer: stringConfig(config, 'tokenizer'),
+      reasoningEffort: stringConfig(config, 'reasoningEffort') as CustomModelConfig['reasoningEffort'],
     };
   }
 

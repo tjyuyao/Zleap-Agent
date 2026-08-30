@@ -69,6 +69,9 @@ export class AnthropicProvider implements ProviderAdapter {
           messages: toAnthropicMessages(request.messages, request.cacheBreakpoints),
           tools,
           temperature: options?.temperature,
+          // Omitted when unset; harmless for endpoints that don't read it, so a
+          // model variant's reasoning effort reaches Anthropic uniformly.
+          reasoning_effort: options?.reasoningEffort ?? model.reasoningEffort,
           stream: true,
         }),
       });

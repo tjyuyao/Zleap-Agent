@@ -149,6 +149,8 @@ export default function Page() {
   /** Project picker state when the thread is not yet in the conversation list. */
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
   const [selectedModelId, setSelectedModelId] = useState<string | undefined>(undefined);
+  /** Chosen variant of the selected model (a named reasoning-effort preset). */
+  const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(undefined);
   const [permissionMode, setPermissionModeState] = useState<PermissionMode>(DEFAULT_PERMISSION_MODE);
   const [composerRunMode, setComposerRunMode] = useState<RunMode>('normal');
   const [composerSkillId, setComposerSkillId] = useState<string | undefined>(undefined);
@@ -222,9 +224,10 @@ export default function Page() {
       avatarId: activeConv?.agentId ?? activeAvatarId,
       projectId: activeConv?.projectId ?? selectedProjectId,
       modelId: selectedModelId,
+      variantId: selectedVariantId,
       permissionMode,
     }),
-    [activeConv?.agentId, activeConv?.projectId, activeAvatarId, selectedProjectId, selectedModelId, permissionMode],
+    [activeConv?.agentId, activeConv?.projectId, activeAvatarId, selectedProjectId, selectedModelId, selectedVariantId, permissionMode],
   );
   const wb = useConversation(activeConvId, engine, spaces, conversationContext);
   const ensureActiveServerConversation = useCallback(
@@ -1109,6 +1112,7 @@ export default function Page() {
                   agentId={conversationContext.avatarId}
                   projectId={conversationContext.projectId}
                   modelId={selectedModelId}
+                  variantId={selectedVariantId}
                   permissionMode={permissionMode}
                   contextSnapshot={wb.contextSnapshot}
                   contextCompaction={wb.contextCompaction}
@@ -1120,7 +1124,8 @@ export default function Page() {
                   onProjectChange={handleProjectChange}
                   onProjectCreated={handleProjectCreated}
                   onCreateProject={() => setProjectDialogOpen(true)}
-                  onModelChange={setSelectedModelId}
+                  onModelChange={(id) => { setSelectedModelId(id); setSelectedVariantId(undefined); }}
+                  onVariantChange={(id) => setSelectedVariantId(id || undefined)}
                   onPermissionModeChange={setPermissionMode}
                   onRunModeChange={handleComposerRunModeChange}
                   onSelectedSkillChange={setComposerSkillId}
@@ -1199,8 +1204,9 @@ export default function Page() {
                 skills={resources.skills}
                 agentId={conversationContext.avatarId}
                 projectId={conversationContext.projectId}
-                modelId={selectedModelId}
-                permissionMode={permissionMode}
+                 modelId={selectedModelId}
+                 variantId={selectedVariantId}
+                 permissionMode={permissionMode}
                 contextSnapshot={wb.contextSnapshot}
                 contextCompaction={wb.contextCompaction}
                 runMode={composerRunMode}
@@ -1212,8 +1218,9 @@ export default function Page() {
                 onProjectChange={handleProjectChange}
                 onProjectCreated={handleProjectCreated}
                 onCreateProject={() => setProjectDialogOpen(true)}
-                onModelChange={setSelectedModelId}
-                onPermissionModeChange={setPermissionMode}
+                 onModelChange={(id) => { setSelectedModelId(id); setSelectedVariantId(undefined); }}
+                 onVariantChange={(id) => setSelectedVariantId(id || undefined)}
+                 onPermissionModeChange={setPermissionMode}
                 onRunModeChange={handleComposerRunModeChange}
                 onSelectedSkillChange={setComposerSkillId}
                 onGoalChange={updateActiveGoal}

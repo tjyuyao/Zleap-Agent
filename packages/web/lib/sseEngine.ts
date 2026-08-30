@@ -39,6 +39,7 @@ export const sseEngine: Engine = async function* sseEngine(history, signal, opts
         avatarId: opts.avatarId,
         projectId: opts.projectId ?? null,
         modelId: opts.modelId,
+        variantId: opts.variantId,
         permissionMode: opts.permissionMode,
         targetSpace: opts.targetSpace,
         runMode: opts.runMode,

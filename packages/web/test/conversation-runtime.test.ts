@@ -982,7 +982,7 @@ describe('conversationRuntime tool settlement', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(runtime.getSnapshot().pendingApproval?.name).toBe('mcp__test__tool__v1');
 
-      runtime.bindContext(undefined, undefined, undefined, 'full_access');
+      runtime.bindContext(undefined, undefined, undefined, undefined, 'full_access');
       await runPromise;
 
       expect(await approvalGate.promise).toBe(true);

@@ -90,6 +90,8 @@ class ConversationRuntime {
   private avatarId?: string;
   private projectId?: string;
   private modelId?: string;
+  /** Selected model variant (a named reasoning-effort preset) for this thread. */
+  private variantId?: string;
   private permissionMode?: PermissionMode;
   /** Kept fresh by the hook so pane labels resolve against current spaces. */
   spaces: SpaceItem[] = [];
@@ -121,18 +123,19 @@ class ConversationRuntime {
   private snap: WorkbenchSnapshot = EMPTY;
   private readonly listeners = new Set<() => void>();
 
-  constructor(conversationId: string, engine: Engine, avatarId?: string, projectId?: string, modelId?: string, permissionMode?: PermissionMode) {
+  constructor(conversationId: string, engine: Engine, avatarId?: string, projectId?: string, modelId?: string, variantId?: string, permissionMode?: PermissionMode) {
     this.conversationId = conversationId;
     this.engine = engine;
     this.avatarId = avatarId;
     this.projectId = projectId;
     this.modelId = modelId;
+    this.variantId = variantId;
     this.permissionMode = permissionMode;
     this.rebuild();
   }
 
   /** Sync thread context; permission mode applies immediately (including mid-run). */
-  bindContext(avatarId?: string, projectId?: string, modelId?: string, permissionMode?: PermissionMode): void {
+  bindContext(avatarId?: string, projectId?: string, modelId?: string, variantId?: string, permissionMode?: PermissionMode): void {
     if (avatarId !== undefined && this.status !== 'running') {
       this.avatarId = avatarId;
     }
@@ -140,6 +143,7 @@ class ConversationRuntime {
       this.projectId = projectId || undefined;
     }
     if (modelId !== undefined) this.modelId = modelId || undefined;
+    if (variantId !== undefined) this.variantId = variantId || undefined;
     if (permissionMode !== undefined) {
       const prev = this.permissionMode;
       this.permissionMode = permissionMode;
@@ -714,6 +718,7 @@ class ConversationRuntime {
         avatarId: this.avatarId,
         projectId: this.projectId,
         modelId: this.modelId,
+        variantId: this.variantId,
         permissionMode: this.permissionMode,
         targetSpace: options.targetSpace,
         runMode: options.runMode,
@@ -965,15 +970,15 @@ function runningConversationIdsSnapshot(): string {
 export function getConversationRuntime(
   conversationId: string,
   engine: Engine,
-  context?: { avatarId?: string; projectId?: string; modelId?: string; permissionMode?: PermissionMode },
+  context?: { avatarId?: string; projectId?: string; modelId?: string; variantId?: string; permissionMode?: PermissionMode },
 ): ConversationRuntime {
   let runtime = registry.get(conversationId);
   if (!runtime) {
-    runtime = new ConversationRuntime(conversationId, engine, context?.avatarId, context?.projectId, context?.modelId, context?.permissionMode);
+    runtime = new ConversationRuntime(conversationId, engine, context?.avatarId, context?.projectId, context?.modelId, context?.variantId, context?.permissionMode);
     registry.set(conversationId, runtime);
     emitRegistry();
   } else if (context) {
-    runtime.bindContext(context?.avatarId, context?.projectId, context?.modelId, context?.permissionMode);
+    runtime.bindContext(context?.avatarId, context?.projectId, context?.modelId, context?.variantId, context?.permissionMode);
   }
   return runtime;
 }
@@ -1013,7 +1018,7 @@ export function useConversation(
   conversationId: string,
   engine: Engine,
   spaces: SpaceItem[],
-  context?: { avatarId?: string; projectId?: string; modelId?: string; permissionMode?: PermissionMode },
+  context?: { avatarId?: string; projectId?: string; modelId?: string; variantId?: string; permissionMode?: PermissionMode },
 ): ConversationView {
   const runtime = getConversationRuntime(conversationId, engine, context);
   runtime.spaces = spaces;

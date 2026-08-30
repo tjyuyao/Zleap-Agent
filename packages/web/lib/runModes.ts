@@ -9,6 +9,8 @@ export type ChatSendOptions = {
   runMode?: RunMode;
   skillId?: string;
   skillLabel?: string;
+  /** Selected model variant (a named reasoning-effort preset) for this send. */
+  variantId?: string;
   attachments?: ChatImageRequestAttachment[];
 };
 

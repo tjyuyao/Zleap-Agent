@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isConfiguredLlmModel } from '../lib/models';
+import { isConfiguredLlmModel, modelVariantOptions } from '../lib/models';
 
 describe('model helpers', () => {
   it('does not treat preset models without API keys as configured', () => {
@@ -30,5 +30,31 @@ describe('model helpers', () => {
         config: { hasApiKey: true },
       }),
     ).toBe(false);
+  });
+
+  it('returns no variant options when the model declares none', () => {
+    expect(
+      modelVariantOptions({
+        model: 'gpt-4o-mini',
+        config: { baseUrl: 'https://api.openai.com/v1' },
+      }),
+    ).toEqual([]);
+  });
+
+  it('derives picker options (id + label) from config.variants', () => {
+    const options = modelVariantOptions({
+      model: 'qwen3.8-27b',
+      config: {
+        baseUrl: 'http://localhost:8000/v1',
+        variants: {
+          low: { displayName: 'Quick', reasoningEffort: 'low' },
+          medium: { reasoningEffort: 'medium' },
+        },
+      },
+    });
+    expect(options).toEqual([
+      { id: 'low', name: 'Quick' },
+      { id: 'medium', name: 'medium' },
+    ]);
   });
 });

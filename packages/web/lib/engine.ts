@@ -121,6 +121,8 @@ export type Engine = (
     avatarId?: string;
     projectId?: string;
     modelId?: string;
+    /** Selected model variant (a named reasoning-effort preset) for this send. */
+    variantId?: string;
     permissionMode?: PermissionMode;
     /** Forced dispatch target (an @-mentioned space): main dispatches straight to it. */
     targetSpace?: string;
