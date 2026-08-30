@@ -1,14 +1,22 @@
 /**
- * Minimal embeddings client for OpenAI-compatible `/embeddings` endpoints, plus
- * a deterministic offline embedder for tests and for running without an
- * embedding endpoint configured. Kept dependency-free (fetch only).
+ * Minimal embeddings client for OpenAI-compatible `/embeddings` endpoints and
+ * multimodal `/embeddings/multimodal` endpoints (Volces Ark doubao-embedding-vision,
+ * text content only), plus a deterministic offline embedder for tests and for
+ * running without an embedding endpoint configured. Kept dependency-free (fetch only).
  */
 
 export type EmbedRequest = {
   baseUrl: string;
-  apiKey: string;
+  /** Optional for local runtimes (Ollama/vLLM); auth header attaches only when set. */
+  apiKey?: string;
   model: string;
   input: string[];
+  /**
+   * Endpoint flavor. `multimodal` targets `/embeddings/multimodal` (e.g. Volces
+   * Ark doubao-embedding-vision) and wraps each text as a `{ type: 'text' }`
+   * content object; `text` (default) uses the OpenAI-compatible `/embeddings`.
+   */
+  mode?: 'text' | 'multimodal';
   signal?: AbortSignal;
 };
 
@@ -22,39 +30,98 @@ type OpenAiEmbeddingResponse = {
   model?: string;
 };
 
+/** Ark multimodal response: `data` is a single `{ embedding: [...] }` object. */
+type MultimodalEmbeddingResponse = {
+  data?: { embedding: number[] };
+  model?: string;
+};
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
 }
 
-/** Call an OpenAI-compatible embeddings endpoint. Throws on HTTP/parse errors. */
+async function postEmbedding(
+  url: string,
+  model: string,
+  input: unknown,
+  signal?: AbortSignal,
+  /** Optional: local runtimes (Ollama/vLLM) need no auth. */
+  apiKey?: string,
+): Promise<Response> {
+  // Local embedding runtimes need no auth: attach the header only when a key is set.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+  const response = await fetch(url, {
+    method: 'POST',
+    signal,
+    headers,
+    body: JSON.stringify({ model, input }),
+  });
+  if (!response.ok) {
+    throw new Error(`embed: HTTP ${response.status}: ${await response.text()}`);
+  }
+  return response;
+}
+
+function embeddingsFromResponse(json: unknown, model: string): EmbedResult {
+  if (json && typeof json === 'object') {
+    const body = json as { data?: unknown; model?: unknown };
+    if (Array.isArray(body.data)) {
+      const rows = (body.data as Array<{ embedding?: number[]; index?: number }>)
+        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+        .map((row) => row.embedding ?? []);
+      return { embeddings: rows, model: typeof body.model === 'string' ? body.model : model };
+    }
+    if (body.data && typeof body.data === 'object') {
+      const embedding = (body.data as { embedding?: number[] }).embedding;
+      if (Array.isArray(embedding)) {
+        return { embeddings: [embedding], model: typeof body.model === 'string' ? body.model : model };
+      }
+    }
+  }
+  throw new Error('embed: unexpected response shape');
+}
+
+/** Call an embeddings endpoint (OpenAI-compatible or multimodal). Throws on HTTP/parse errors. */
 export async function embed(request: EmbedRequest): Promise<EmbedResult> {
   if (!request.baseUrl) {
     throw new Error('embed: baseUrl is required');
   }
-  if (!request.apiKey) {
-    throw new Error('embed: apiKey is required');
-  }
+  // apiKey is optional: local runtimes (Ollama/vLLM) have no auth, so only
+  // baseUrl is strictly required; the header attaches only when a key is set.
   if (request.input.length === 0) {
     return { embeddings: [], model: request.model };
   }
 
-  const response = await fetch(`${normalizeBaseUrl(request.baseUrl)}/embeddings`, {
-    method: 'POST',
-    signal: request.signal,
-    headers: {
-      Authorization: `Bearer ${request.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: request.model, input: request.input }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`embed: HTTP ${response.status}: ${await response.text()}`);
+  const baseUrl = normalizeBaseUrl(request.baseUrl);
+  if (request.mode === 'multimodal') {
+    // Ark /embeddings/multimodal merges the whole `input` array into a single
+    // vector, so vectorize each text with its own request to keep 1:1 mapping.
+    const results = await Promise.all(
+      request.input.map(async (text) => {
+        const response = await postEmbedding(
+          `${baseUrl}/embeddings/multimodal`,
+          request.model,
+          [{ type: 'text', text }],
+          request.signal,
+          request.apiKey,
+        );
+        return embeddingsFromResponse(await response.json(), request.model);
+      }),
+    );
+    return { embeddings: results.flatMap((result) => result.embeddings), model: request.model };
   }
 
-  const json = (await response.json()) as OpenAiEmbeddingResponse;
-  const rows = [...(json.data ?? [])].sort((a, b) => a.index - b.index);
-  return { embeddings: rows.map((row) => row.embedding), model: json.model ?? request.model };
+  const response = await postEmbedding(
+    `${baseUrl}/embeddings`,
+    request.model,
+    request.input,
+    request.signal,
+    request.apiKey,
+  );
+  return embeddingsFromResponse(await response.json(), request.model);
 }
 
 /**

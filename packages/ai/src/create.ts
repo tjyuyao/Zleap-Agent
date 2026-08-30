@@ -11,7 +11,11 @@ export type CustomModelConfig = {
   /** Which wire format to speak. Default 'openai'. */
   protocol?: ModelProtocol;
   baseUrl: string;
-  apiKey: string;
+  /**
+   * Optional for local runtimes (Ollama/vLLM/llama.cpp) which speak the wire
+   * format without auth; the provider adapters attach the header only when set.
+   */
+  apiKey?: string;
   model: string;
   displayName?: string;
   contextWindow?: number;

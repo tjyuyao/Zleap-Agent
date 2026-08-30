@@ -2743,8 +2743,10 @@ export class ChatEngine {
       (is302Config(config) ? resolve302ModelBaseUrl() : undefined) ??
       this.custom?.baseUrl;
     // Per-model key (stored on the record) wins; fall back to the server env key.
+    // apiKey is optional: local runtimes (Ollama/vLLM) have no auth, so only
+    // baseUrl is strictly required; the provider attaches the header when set.
     const apiKey = stringConfig(config, 'apiKey') ?? (is302Config(config) ? resolve302ApiKey() : undefined) ?? this.custom?.apiKey;
-    if (!baseUrl || !apiKey) {
+    if (!baseUrl) {
       return undefined;
     }
     return {
@@ -3184,7 +3186,8 @@ export class ChatEngine {
     const dimension = emb?.dimension ?? (useReal ? DEFAULT_EMBED_DIM : FAUX_EMBED_DIM);
     const embedder: Embedder = useReal
       ? async (texts) =>
-          (await embed({ baseUrl: baseUrl!, apiKey: apiKey!, model: emb!.model, input: texts })).embeddings
+          (await embed({ baseUrl: baseUrl!, apiKey: apiKey!, model: emb!.model, input: texts, mode: emb!.mode }))
+            .embeddings
       : async (texts) => texts.map((text) => fauxEmbed(text, dimension));
     const store = await createStore({ connectionString: config.databaseUrl, dimension, embed: embedder });
     if (!store) {

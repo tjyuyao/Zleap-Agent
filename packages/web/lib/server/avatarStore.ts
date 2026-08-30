@@ -17,14 +17,18 @@ export function storeConfigFromEnv(): StoreConfig | null {
   const embeddingModel = process.env.ZLEAP_EMBED_MODEL;
   const baseUrl = process.env.ZLEAP_EMBED_BASE_URL ?? process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = process.env.ZLEAP_EMBED_API_KEY ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  const useReal = Boolean(embeddingModel && baseUrl && apiKey);
+  // apiKey is optional for local embedding runtimes (Ollama/vLLM): a
+  // real embedder is used when model + baseUrl are set, key or not.
+  const useReal = Boolean(embeddingModel && baseUrl);
   const dimension = process.env.ZLEAP_EMBED_DIM
     ? Number(process.env.ZLEAP_EMBED_DIM)
     : useReal
       ? DEFAULT_EMBED_DIM
       : FAUX_EMBED_DIM;
+  const mode = process.env.ZLEAP_EMBED_MODE?.trim() === 'multimodal' ? 'multimodal' : undefined;
   const embedder: Embedder = useReal
-    ? async (texts) => (await embed({ baseUrl: baseUrl!, apiKey: apiKey!, model: embeddingModel!, input: texts })).embeddings
+    ? async (texts) =>
+        (await embed({ baseUrl: baseUrl!, apiKey: apiKey!, model: embeddingModel!, input: texts, mode })).embeddings
     : async (texts) => texts.map((text) => fauxEmbed(text, dimension));
   return { connectionString: databaseUrl, dimension, embed: embedder };
 }

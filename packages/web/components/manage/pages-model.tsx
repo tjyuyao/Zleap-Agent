@@ -259,8 +259,21 @@ function modelErrorMessage(t: ReturnType<typeof useTranslation>['t'], error: unk
       defaultValue: '还没有可用的 API Key。请先在模型页填写 302.AI API Key，或编辑这个模型单独填写 Key。',
     });
   }
+  if (code === 'model_base_url_required') {
+    return t('model.errorBaseUrlRequired', {
+      defaultValue: '缺少 Base URL。请在编辑模型时填写该模型的访问地址。',
+    });
+  }
   if (code === 'model_not_found') {
     return t('model.errorNotFound', { defaultValue: '没有找到这个模型配置，请刷新页面后再试。' });
+  }
+  if (code.startsWith('model_test_failed')) {
+    // The test route inlines a concise excerpt of the server's response
+    // body after the code (e.g. "model_test_failed:404 The model `x` does not
+    // exist."); strip the code prefix to surface the real reason.
+    const reason = code.replace(/^model_test_failed(?::\d+)?\s*/, '').trim();
+    const label = t('model.testFailed', { defaultValue: '连接测试失败' });
+    return reason ? `${label}: ${reason}` : label;
   }
   return code;
 }

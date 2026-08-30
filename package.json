@@ -12,6 +12,8 @@
     "dev": "pnpm --filter @zleap/agent build && pnpm --filter @zleap/host build && node scripts/dev-all.mjs",
     "stop": "pnpm --filter @zleap/agent build && pnpm --filter @zleap/host build && pnpm --filter @zleap-ai/cli build && node packages/cli/dist/index.js stop",
     "dev:web": "pnpm --filter @zleap/agent build && pnpm --filter @zleap/host build && node scripts/dev-web.mjs",
+    "dev:web:stop": "node scripts/dev-web-stop.mjs",
+    "dev:web:restart": "node scripts/dev-web-restart.mjs",
     "dev:web:raw": "pnpm --filter @zleap/web dev:next",
     "dev:tasks": "pnpm --filter @zleap/agent build && pnpm --filter @zleap/host build && node scripts/tasks-worker.mjs",
     "dev:gateway": "pnpm --filter @zleap/agent build && pnpm --filter @zleap/host build && node scripts/gateway.mjs",

@@ -1,7 +1,14 @@
 import type { ModelConfigRecord } from '@zleap/core';
 import type { ZleapStore } from '@zleap/store';
 import { modelKind } from '../models';
-import { DEFAULT_302_MODEL_BASE_URL, read302IntegrationConfig, resolve302ApiKey, resolve302ModelBaseUrl } from './integration302Config';
+import {
+  DEFAULT_302_MODEL_BASE_URL,
+  read302IntegrationConfig,
+  readRemoved302ModelIds,
+  resolve302ApiKey,
+  resolve302ModelBaseUrl,
+  save302IntegrationConfig,
+} from './integration302Config';
 import { listFileModelConfigs, replaceFileModelConfigs } from './modelConfigFileStore';
 
 type StoreLike = Pick<ZleapStore, 'models'> | null;
@@ -53,16 +60,38 @@ export async function ensureDefault302ModelConfigs(store: StoreLike): Promise<Mo
 
 export async function upsertDefault302ModelConfigs(
   store: StoreLike,
-  options: { apiKey?: string; modelBaseUrl?: string } = {},
+  options: { apiKey?: string; modelBaseUrl?: string; removedModelIds?: ReadonlySet<string> } = {},
 ): Promise<ModelConfigRecord[]> {
   const existing = store ? await store.models.listModelConfigs() : await listFileModelConfigs();
-  const { models, changedIds, replaceFile } = mergeDefault302Models(existing, options.apiKey, options.modelBaseUrl);
+  const removedModelIds = options.removedModelIds ?? new Set(await readRemoved302ModelIds());
+  const { models, changedIds, replaceFile } = mergeDefault302Models(existing, options.apiKey, options.modelBaseUrl, removedModelIds);
   if (store) {
     await Promise.all(models.filter((model) => changedIds.has(model.id)).map((model) => store.models.saveModelConfig(model)));
   } else if (replaceFile) {
     await replaceFileModelConfigs(models);
   }
   return models;
+}
+
+/** Built-in 302 default model ids (the presets that `upsertDefault302ModelConfigs` maintains). */
+export const BUILT_IN_302_DEFAULT_MODEL_IDS: ReadonlySet<string> = new Set(DEFAULT_302_MODEL_CONFIGS.map((preset) => preset.id));
+
+export function isBuiltInDefault302ModelId(id: string): boolean {
+  return BUILT_IN_302_DEFAULT_MODEL_IDS.has(id);
+}
+
+/**
+ * Remember a built-in default model the user explicitly deleted so the next
+ * `upsertDefault302ModelConfigs` (run by every model list/mutation) does not
+ * resurrect it. Non-preset ids are a no-op; custom models never re-seed themselves.
+ */
+export async function markDefault302ModelRemoved(id: string): Promise<void> {
+  if (!BUILT_IN_302_DEFAULT_MODEL_IDS.has(id)) return;
+  const config = await read302IntegrationConfig();
+  const removedModelIds = new Set(config.removedModelIds ?? []);
+  if (removedModelIds.has(id)) return;
+  removedModelIds.add(id);
+  await save302IntegrationConfig({ removedModelIds: [...removedModelIds] });
 }
 
 export function createDefault302ModelConfigRecords(options: { apiKey?: string; modelBaseUrl?: string } = {}): ModelConfigRecord[] {
@@ -93,6 +122,7 @@ function mergeDefault302Models(
   models: ModelConfigRecord[],
   apiKey: string | undefined,
   modelBaseUrl = DEFAULT_302_MODEL_BASE_URL,
+  removedModelIds: ReadonlySet<string> = new Set<string>(),
 ): { models: ModelConfigRecord[]; changedIds: Set<string>; replaceFile: boolean } {
   const now = new Date();
   const next = [...models];
@@ -100,39 +130,40 @@ function mergeDefault302Models(
 
   for (const preset of DEFAULT_302_MODEL_CONFIGS) {
     const existingIndex = next.findIndex((model) => model.id === preset.id);
+    const existing = existingIndex >= 0 ? next[existingIndex]! : undefined;
     const kind = modelKind({ purpose: preset.purpose });
     const kindHasDefault = next.some((model) => modelKind(model) === kind && model.config?.isDefault === true);
-    const config = defaultModelConfig(preset.config, existingIndex >= 0 ? next[existingIndex]!.config : undefined, {
+    const config = defaultModelConfig(preset.config, existing?.config, {
       ...(apiKey ? { apiKey } : {}),
       baseUrl: modelBaseUrl,
-      isDefault: existingIndex >= 0 ? next[existingIndex]!.config?.isDefault === true || !kindHasDefault : !kindHasDefault,
+      isDefault: existing ? existing.config?.isDefault === true || !kindHasDefault : !kindHasDefault,
     });
-    const record: ModelConfigRecord =
-      existingIndex >= 0
-        ? {
-            ...next[existingIndex]!,
-            providerId: preset.providerId,
-            model: preset.model,
-            purpose: preset.purpose,
-            config,
-            updatedAt: now,
-          }
-        : {
-            id: preset.id,
-            providerId: preset.providerId,
-            model: preset.model,
-            purpose: preset.purpose,
-            config,
-            createdAt: now,
-            updatedAt: now,
-          };
 
-    if (existingIndex >= 0) {
-      if (modelChanged(next[existingIndex]!, record)) {
+    if (existing) {
+      const record: ModelConfigRecord = {
+        ...existing,
+        providerId: preset.providerId,
+        model: preset.model,
+        purpose: preset.purpose,
+        config,
+        updatedAt: now,
+      };
+      if (modelChanged(existing, record)) {
         next[existingIndex] = record;
         changedIds.add(record.id);
       }
-    } else {
+    } else if (!removedModelIds.has(preset.id)) {
+      // A missing preset is re-created only when the user did not explicitly
+      // delete it (tracked in the 302 integration config tombstones).
+      const record: ModelConfigRecord = {
+        id: preset.id,
+        providerId: preset.providerId,
+        model: preset.model,
+        purpose: preset.purpose,
+        config,
+        createdAt: now,
+        updatedAt: now,
+      };
       next.unshift(record);
       changedIds.add(record.id);
     }

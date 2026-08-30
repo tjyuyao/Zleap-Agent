@@ -308,7 +308,9 @@ async function modelFromStore(store: ZleapStore): Promise<EngineModelConfig | un
   const config = selected.config ?? {};
   const baseUrl = typeof config.baseUrl === 'string' ? config.baseUrl : process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = typeof config.apiKey === 'string' ? config.apiKey : process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!baseUrl || !apiKey) return undefined;
+  // apiKey is optional: local runtimes (Ollama/vLLM) need no auth, so only
+  // baseUrl is strictly required for a resolvable engine model.
+  if (!baseUrl) return undefined;
   return {
     protocol: selected.providerId === 'anthropic' || config.protocol === 'anthropic' ? 'anthropic' : 'openai',
     baseUrl,

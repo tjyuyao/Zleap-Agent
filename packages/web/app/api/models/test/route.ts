@@ -29,32 +29,30 @@ export async function POST(req: Request): Promise<Response> {
       (is302Config(config) ? DEFAULT_302_MODEL_BASE_URL : undefined) ??
       process.env.ZLEAP_MODEL_BASE_URL ??
       process.env.LLM_BASE_URL;
+    // apiKey is optional: local runtimes (Ollama/vLLM/llama.cpp) have no auth, so
+    // only baseUrl is strictly required; the key attaches only when present.
     const apiKey = stringValue(config.apiKey) ?? (is302Config(config) ? resolve302ApiKey(integration302) : undefined) ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-    if (!baseUrl || !apiKey) {
-      return Response.json({ error: 'model_api_key_required' }, { status: 400 });
+    if (!baseUrl) {
+      return Response.json({ error: 'model_base_url_required' }, { status: 400 });
     }
     const protocol = modelProtocol(model.providerId, config.protocol);
     const response =
       modelKind(model) === 'embedding'
-        ? await fetch(`${normalizeBaseUrl(baseUrl)}/embeddings`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${apiKey}`,
+        ? await fetch(
+            `${normalizeBaseUrl(baseUrl)}${config.embeddingMode === 'multimodal' ? '/embeddings/multimodal' : '/embeddings'}`,
+            {
+              method: 'POST',
+              headers: openAiAuthHeaders(apiKey),
+              body: JSON.stringify({
+                model: model.model,
+                input: config.embeddingMode === 'multimodal' ? [{ type: 'text', text: 'ok' }] : ['ok'],
+              }),
             },
-            body: JSON.stringify({
-              model: model.model,
-              input: 'ok',
-            }),
-          })
+          )
         : protocol === 'anthropic'
         ? await fetch(`${normalizeBaseUrl(baseUrl)}/messages`, {
             method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
-            },
+            headers: anthropicAuthHeaders(apiKey),
             body: JSON.stringify({
               model: model.model,
               messages: [{ role: 'user', content: 'Reply with ok.' }],
@@ -64,10 +62,7 @@ export async function POST(req: Request): Promise<Response> {
           })
         : await fetch(`${normalizeBaseUrl(baseUrl)}/chat/completions`, {
             method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              authorization: `Bearer ${apiKey}`,
-            },
+            headers: openAiAuthHeaders(apiKey),
             body: JSON.stringify({
               model: model.model,
               messages: [{ role: 'user', content: 'Reply with ok.' }],
@@ -76,7 +71,15 @@ export async function POST(req: Request): Promise<Response> {
             }),
           });
     if (!response.ok) {
-      return Response.json({ error: `model_test_failed:${response.status}`, detail: await response.text() }, { status: 400 });
+      // Inline a concise excerpt of the server's response body into the
+      // error string (the `postJson` → toast path only carries `error`), so the
+      // UI can show the real reason, e.g. 404 "The model `x` does not exist".
+      const detail = (await response.text()).trim();
+      const excerpt = detail.length > 200 ? `${detail.slice(0, 200)}…` : detail;
+      return Response.json(
+        { error: `model_test_failed:${response.status}${excerpt ? ` ${excerpt}` : ''}`, detail },
+        { status: 400 },
+      );
     }
     return Response.json({ ok: true });
   } catch (error) {
@@ -103,4 +106,23 @@ function modelProtocol(providerId: string, protocol: unknown): 'openai' | 'anthr
     return 'anthropic';
   }
   return 'openai';
+}
+
+/** OpenAI-compatible auth headers; local runtimes need no auth, so attach the
+ *  key only when present (avoids sending a meaningless `Bearer undefined`). */
+function openAiAuthHeaders(apiKey: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (apiKey) {
+    headers.authorization = `Bearer ${apiKey}`;
+  }
+  return headers;
+}
+
+/** Anthropic auth headers; same optional-key rule as the OpenAI-compatible ones. */
+function anthropicAuthHeaders(apiKey: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' };
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+  return headers;
 }

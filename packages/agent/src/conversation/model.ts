@@ -66,7 +66,9 @@ export function modelFromEnv(): CustomModelConfig | undefined {
   const baseUrl = process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
   const model = process.env.ZLEAP_MODEL_NAME ?? process.env.LLM_MODEL;
-  if (!baseUrl || !apiKey || !model) {
+  // apiKey is optional: local runtimes (Ollama/vLLM) need no auth, so only
+  // baseUrl + model are strictly required for an env-configured model.
+  if (!baseUrl || !model) {
     return undefined;
   }
   return { baseUrl, apiKey, model, id: model, displayName: model };
@@ -96,7 +98,9 @@ export function toEngineModel(record: ModelConfigRecord, fallback: { baseUrl?: s
   const apiKey = stringConfig(config, 'apiKey')
     ?? (is302 ? fallback.apiKey ?? resolve302ApiKey() : undefined)
     ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!baseUrl || !apiKey) {
+  // apiKey is optional for local runtimes (no auth needed); only baseUrl
+  // is strictly required. Providers attach the auth header only when set.
+  if (!baseUrl) {
     return undefined;
   }
   return {

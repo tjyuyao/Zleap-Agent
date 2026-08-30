@@ -51,20 +51,30 @@ export function markDefault(model: ModelConfigRecord, isDefault: boolean): Model
 export type ResolvedEmbeddingConfig = {
   model: string;
   baseUrl: string;
-  apiKey: string;
+  /** Optional for local runtimes (Ollama/vLLM); auth attaches only when set. */
+  apiKey?: string;
   dimension?: number;
+  /** Endpoint flavor: 'multimodal' uses /embeddings/multimodal (e.g. doubao-embedding-vision). */
+  mode?: 'text' | 'multimodal';
 };
+
+function embeddingMode(value: unknown): 'multimodal' | undefined {
+  return value === 'multimodal' ? 'multimodal' : undefined;
+}
 
 export function embeddingConfigFromModel(model: ModelConfigRecord): ResolvedEmbeddingConfig | undefined {
   const config = model.config ?? {};
   const baseUrl = stringValue(config.baseUrl) ?? process.env.ZLEAP_EMBED_BASE_URL ?? process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = stringValue(config.apiKey) ?? process.env.ZLEAP_EMBED_API_KEY ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!baseUrl || !apiKey) return undefined;
+  // apiKey is optional for local embedding runtimes (no auth); only
+  // baseUrl is strictly required to resolve a real embedder from a config.
+  if (!baseUrl) return undefined;
   const dimension = typeof config.embeddingDimension === 'number' ? config.embeddingDimension : process.env.ZLEAP_EMBED_DIM ? Number(process.env.ZLEAP_EMBED_DIM) : undefined;
   return {
     model: model.model,
     baseUrl,
     apiKey,
+    mode: embeddingMode(config.embeddingMode),
     dimension: Number.isFinite(dimension) ? dimension : undefined,
   };
 }
@@ -74,12 +84,15 @@ export function embeddingConfigFromEnv(): ResolvedEmbeddingConfig | undefined {
   if (!model) return undefined;
   const baseUrl = process.env.ZLEAP_EMBED_BASE_URL ?? process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = process.env.ZLEAP_EMBED_API_KEY ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!baseUrl || !apiKey) return undefined;
+  // apiKey is optional: local embedding runtimes (Ollama/vLLM) need no auth,
+  // so only baseUrl is strictly required for an env-configured embedder.
+  if (!baseUrl) return undefined;
   const dimension = process.env.ZLEAP_EMBED_DIM ? Number(process.env.ZLEAP_EMBED_DIM) : undefined;
   return {
     model,
     baseUrl,
     apiKey,
+    mode: embeddingMode(process.env.ZLEAP_EMBED_MODE),
     dimension: Number.isFinite(dimension) ? dimension : undefined,
   };
 }

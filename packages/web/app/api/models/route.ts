@@ -13,7 +13,7 @@ import {
   setFileDefaultModel,
 } from '../../../lib/server/modelConfigFileStore';
 import { clearDefaultsForKind, markDefault, modelDefaultsChanged, normalizeModelDefaults } from '../../../lib/server/modelConfigResolve';
-import { upsertDefault302ModelConfigs } from '../../../lib/server/modelPresets';
+import { markDefault302ModelRemoved, upsertDefault302ModelConfigs } from '../../../lib/server/modelPresets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -252,6 +252,9 @@ export async function DELETE(req: Request): Promise<Response> {
       if (!deleted) {
         return Response.json({ error: 'model_not_found' }, { status: 404 });
       }
+      // Remember an explicitly deleted built-in preset so the next list refresh's
+      // `upsertDefault302ModelConfigs` does not resurrect it (no-op for custom models).
+      await markDefault302ModelRemoved(id);
       const remaining = await listFileModelConfigs();
       await persistNormalizedModels(null, remaining);
       return Response.json({ ok: true, model: redactModel(deleted) });
@@ -271,6 +274,9 @@ export async function DELETE(req: Request): Promise<Response> {
       return Response.json({ error: 'model_not_found' }, { status: 404 });
     }
     await store.models.deleteModelConfig(id);
+    // Remember an explicitly deleted built-in preset so the next list refresh's
+    // `upsertDefault302ModelConfigs` does not resurrect it (no-op for custom models).
+    await markDefault302ModelRemoved(id);
     await persistNormalizedModels(store, await store.models.listModelConfigs());
     return Response.json({ ok: true, model: redactModel(model) });
   } catch (error) {

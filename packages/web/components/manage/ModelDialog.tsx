@@ -45,6 +45,8 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
   const [apiKey, setApiKey] = useState('');
   const [contextWindow, setContextWindow] = useState('');
   const [maxOutput, setMaxOutput] = useState('');
+  const [embeddingMode, setEmbeddingMode] = useState<'text' | 'multimodal'>('text');
+  const [embeddingDimension, setEmbeddingDimension] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -62,6 +64,8 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
       setApiKey('');
       setContextWindow(c.contextWindow != null ? String(c.contextWindow) : '');
       setMaxOutput(c.maxOutputTokens != null ? String(c.maxOutputTokens) : '');
+      setEmbeddingMode(c.embeddingMode === 'multimodal' ? 'multimodal' : 'text');
+      setEmbeddingDimension(c.embeddingDimension != null ? String(c.embeddingDimension) : '');
       return;
     }
     setKind('llm');
@@ -73,6 +77,8 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
     setApiKey('');
     setContextWindow('');
     setMaxOutput('');
+    setEmbeddingMode('text');
+    setEmbeddingDimension('');
   }, [open, editTarget]);
 
   const changeProvider = (value: string) => {
@@ -88,9 +94,10 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
 
   const submit = async () => {
     const id = editing ? editTarget!.id : slugify(name || model);
-    // On edit the API key may be left blank to keep the stored one.
-    if (!id || !model.trim() || !baseUrl.trim() || (!editing && !apiKey.trim())) {
-      toast.error(t('model.validation', { defaultValue: 'Name, model, Base URL, and API Key are required.' }));
+    // The API key is only required for cloud APIs: local runtimes (Ollama,
+    // vLLM, …) have none. On edit a blank key keeps the stored one.
+    if (!id || !model.trim() || !baseUrl.trim()) {
+      toast.error(t('model.validation', { defaultValue: 'Model and Base URL are required. (API key only for cloud APIs.)' }));
       return;
     }
     const provider = MODEL_PROVIDERS.find((candidate) => candidate.id === providerId) ?? DEFAULT_PROVIDER;
@@ -104,6 +111,12 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
       contextWindow: numeric(contextWindow),
       maxOutputTokens: numeric(maxOutput),
     });
+    if (config && kind === 'embedding') {
+      // Explicit values so an edit can clear a previously saved mode/dimension
+      // (PATCH merges the submitted config over the stored one).
+      config.embeddingMode = embeddingMode;
+      config.embeddingDimension = numeric(embeddingDimension) ?? null;
+    }
     setBusy(true);
     try {
       if (editing) {
@@ -200,9 +213,35 @@ export function ModelDialog({ open, onOpenChange, avatarId, editTarget, onSaved 
           <Input id="model-base" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.302.ai/v1" className="font-mono text-xs" />
         </ManageField>
 
-        <ManageField label={t('model.apiKey')} htmlFor="model-key">
+        <ManageField label={t('model.apiKey')} htmlFor="model-key" description={t('model.apiKeyHint', { defaultValue: 'Required for cloud APIs; leave blank for local runtimes.' })}>
           <Input id="model-key" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={editing ? t('model.keyKeepHint', { defaultValue: 'Leave blank to keep the saved key' }) : 'sk-...'} className="font-mono text-xs" autoComplete="off" />
         </ManageField>
+
+        {kind === 'embedding' ? (
+          <>
+            <ManageField label={t('model.embeddingMode')} description={t('model.embeddingModeHint')}>
+              <Select value={embeddingMode} onValueChange={(value) => setEmbeddingMode(value as 'text' | 'multimodal')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="text">text → /embeddings</SelectItem>
+                    <SelectItem value="multimodal">multimodal → /embeddings/multimodal</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </ManageField>
+
+            <ManageField
+              label={t('model.embeddingDimension')}
+              htmlFor="model-dim"
+              description={t('model.embeddingDimensionHint')}
+            >
+              <Input id="model-dim" value={embeddingDimension} onChange={(e) => setEmbeddingDimension(e.target.value)} placeholder="2048" inputMode="numeric" className="font-mono text-xs" />
+            </ManageField>
+          </>
+        ) : null}
 
         {kind === 'llm' ? (
           <>

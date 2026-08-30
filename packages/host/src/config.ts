@@ -10,6 +10,8 @@ export type EmbeddingConfig = {
   baseUrl?: string;
   apiKey?: string;
   dimension?: number;
+  /** Endpoint flavor: 'multimodal' uses /embeddings/multimodal (e.g. doubao-embedding-vision). */
+  mode?: 'text' | 'multimodal';
 };
 
 export type CliConfig = {
@@ -80,6 +82,7 @@ export function resolvePersistence(config: CliConfig): PersistenceConfig {
           baseUrl: process.env.ZLEAP_EMBED_BASE_URL,
           apiKey: process.env.ZLEAP_EMBED_API_KEY,
           dimension: process.env.ZLEAP_EMBED_DIM ? Number(process.env.ZLEAP_EMBED_DIM) : undefined,
+          mode: process.env.ZLEAP_EMBED_MODE?.trim() === 'multimodal' ? 'multimodal' : undefined,
         }
       : undefined);
   return { databaseUrl, embedding };
@@ -163,6 +166,7 @@ export const CONFIG_ENV_MAP: Record<string, string> = {
   'embedding.baseUrl': 'ZLEAP_EMBED_BASE_URL',
   'embedding.apiKey': 'ZLEAP_EMBED_API_KEY',
   'embedding.dimension': 'ZLEAP_EMBED_DIM',
+  'embedding.mode': 'ZLEAP_EMBED_MODE',
 };
 
 export function envKeyForConfigPath(path: string): string | undefined {
@@ -181,6 +185,7 @@ export const TRACKED_ENV_KEYS = [
   'ZLEAP_EMBED_BASE_URL',
   'ZLEAP_EMBED_API_KEY',
   'ZLEAP_EMBED_DIM',
+  'ZLEAP_EMBED_MODE',
   'ZLEAP_302_API_KEY',
   'LLM_BASE_URL',
   'LLM_API_KEY',

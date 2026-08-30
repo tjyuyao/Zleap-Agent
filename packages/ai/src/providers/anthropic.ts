@@ -40,26 +40,28 @@ export class AnthropicProvider implements ProviderAdapter {
   ): AsyncIterable<AssistantStreamEvent> {
     const apiKey = options?.apiKey ?? model.apiKey;
     const baseUrl = normalizeBaseUrl(options?.baseUrl ?? model.baseUrl) ?? DEFAULT_BASE_URL;
-    if (!apiKey) {
-      yield { type: 'error', error: { code: 'missing_api_key', message: 'Anthropic apiKey is required' } };
-      return;
-    }
+    // apiKey is optional: local anthropic-compatible gateways/proxies may not
+    // require auth, so only attach the header when set (see openai-compatible).
 
     const tools =
       request.tools && request.tools.length > 0
         ? request.tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.parameters }))
         : undefined;
 
+    const headers: Record<string, string> = {
+      'anthropic-version': ANTHROPIC_VERSION,
+      'content-type': 'application/json',
+    };
+    if (apiKey) {
+      headers['x-api-key'] = apiKey;
+    }
+
     let response: Response;
     try {
       response = await fetch(`${baseUrl}/messages`, {
         method: 'POST',
         signal: options?.signal,
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': ANTHROPIC_VERSION,
-          'content-type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           model: model.model,
           max_tokens: options?.maxOutputTokens ?? model.maxOutputTokens ?? DEFAULT_MAX_TOKENS,

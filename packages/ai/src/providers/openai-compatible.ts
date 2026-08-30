@@ -34,9 +34,11 @@ export class OpenAiCompatibleProvider implements ProviderAdapter {
       yield { type: 'error', error: { code: 'missing_base_url', message: 'OpenAI-compatible baseUrl is required' } };
       return;
     }
-    if (!apiKey) {
-      yield { type: 'error', error: { code: 'missing_api_key', message: 'OpenAI-compatible apiKey is required' } };
-      return;
+    // apiKey is optional: local runtimes (Ollama, vLLM, llama.cpp, LM Studio)
+    // speak this wire format without auth, so only attach the header when set.
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
     }
 
     let response: Response;
@@ -44,10 +46,7 @@ export class OpenAiCompatibleProvider implements ProviderAdapter {
       response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         signal: options?.signal,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           model: model.model,
           messages: toOpenAiMessages(request),

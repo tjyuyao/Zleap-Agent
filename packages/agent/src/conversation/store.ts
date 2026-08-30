@@ -11,9 +11,12 @@ const FAUX_EMBED_DIM = 64;
 export type ResolvedEmbedding = {
   model: string;
   baseUrl: string;
-  apiKey: string;
+  /** Optional for local runtimes (Ollama/vLLM); auth attaches only when set. */
+  apiKey?: string;
   /** Declared by the source; may disagree with the schema (then it's reported). */
   dimension?: number;
+  /** Endpoint flavor: 'multimodal' uses /embeddings/multimodal (e.g. doubao-embedding-vision). */
+  mode?: 'text' | 'multimodal';
 };
 
 /** Embedding service from env (ZLEAP_EMBED_* → ZLEAP_MODEL_* → LLM_*). */
@@ -21,11 +24,24 @@ export function embeddingFromEnv(): ResolvedEmbedding | undefined {
   const model = process.env.ZLEAP_EMBED_MODEL;
   const baseUrl = process.env.ZLEAP_EMBED_BASE_URL ?? process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = process.env.ZLEAP_EMBED_API_KEY ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!model || !baseUrl || !apiKey) {
+  // apiKey is optional: local runtimes (Ollama/vLLM) need no auth, so only
+  // model + baseUrl are strictly required for an env-configured embedder.
+  if (!model || !baseUrl) {
     return undefined;
   }
   const dim = process.env.ZLEAP_EMBED_DIM ? Number(process.env.ZLEAP_EMBED_DIM) : undefined;
-  return { model, baseUrl, apiKey, ...(Number.isFinite(dim) ? { dimension: dim } : {}) };
+  return {
+    model,
+    baseUrl,
+    apiKey,
+    mode: embeddingModeFromEnv(),
+    ...(Number.isFinite(dim) ? { dimension: dim } : {}),
+  };
+}
+
+/** Parse ZLEAP_EMBED_MODE ('multimodal' → multimodal, anything else → undefined). */
+export function embeddingModeFromEnv(): 'multimodal' | undefined {
+  return process.env.ZLEAP_EMBED_MODE?.trim() === 'multimodal' ? 'multimodal' : undefined;
 }
 
 /** Embedding service from a DB model config row, falling back to env for creds. */
@@ -35,11 +51,14 @@ export function embeddingFromRecord(record: ModelConfigRecord): ResolvedEmbeddin
     ?? process.env.ZLEAP_EMBED_BASE_URL ?? process.env.ZLEAP_MODEL_BASE_URL ?? process.env.LLM_BASE_URL;
   const apiKey = str(config.apiKey)
     ?? process.env.ZLEAP_EMBED_API_KEY ?? process.env.ZLEAP_MODEL_API_KEY ?? process.env.LLM_API_KEY;
-  if (!record.model || !baseUrl || !apiKey) {
+  // apiKey is optional for local embedding runtimes (no auth needed); only
+  // the model name + baseUrl are strictly required to vectorize memory text.
+  if (!record.model || !baseUrl) {
     return undefined;
   }
   const dim = typeof config.embeddingDimension === 'number' ? config.embeddingDimension : undefined;
-  return { model: record.model, baseUrl, apiKey, ...(dim ? { dimension: dim } : {}) };
+  const mode = typeof config.embeddingMode === 'string' && config.embeddingMode === 'multimodal' ? 'multimodal' : undefined;
+  return { model: record.model, baseUrl, apiKey, mode, ...(dim ? { dimension: dim } : {}) };
 }
 
 /**
@@ -147,8 +166,8 @@ function dimensionFor(resolved: ResolvedEmbedding | undefined): number {
 
 function makeEmbedder(resolved: ResolvedEmbedding | undefined, dimension: number): Embedder {
   if (resolved) {
-    const { baseUrl, apiKey, model } = resolved;
-    return async (texts) => (await embed({ baseUrl, apiKey, model, input: texts })).embeddings;
+    const { baseUrl, apiKey, model, mode } = resolved;
+    return async (texts) => (await embed({ baseUrl, apiKey, model, input: texts, mode })).embeddings;
   }
   return async (texts) => texts.map((text) => fauxEmbed(text, dimension));
 }
